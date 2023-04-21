@@ -500,7 +500,7 @@ spec:
         kubernetes.azure.com/agentpool: nodepool1
       hostPID: true
       containers:
-      - image: mcr.microsoft.com/mirror/docker/library/ubuntu:18.04
+      - image: mcr.microsoft.com/oss/nginx/nginx:1.21.6
         name: ubuntu
         command: ["sleep", "infinity"]
         resources:
@@ -517,7 +517,7 @@ func getNginxPodTemplate(nodeName string) string {
 	return fmt.Sprintf(`apiVersion: v1
 kind: Pod
 metadata:
-  name: %[1]s
+  name: %[1]s-nginx
   namespace: default
 spec:
   containers:
@@ -527,6 +527,51 @@ spec:
   nodeSelector:
     kubernetes.io/hostname: %[1]s
 `, nodeName)
+}
+
+func getWasmSpinPodTemplate(nodeName string) string {
+	return fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %[1]s-wasm-spin
+  namespace: default
+spec:
+  runtimeClassName: wasmtime-spin
+  containers:
+  - name: spin-hello
+    image: ghcr.io/deislabs/containerd-wasm-shims/examples/spin-rust-hello:v0.5.1
+    imagePullPolicy: IfNotPresent
+    command: ["/"]
+  nodeSelector:
+    kubernetes.io/hostname: %[1]s
+`, nodeName)
+}
+
+func getWasmSlightPodTemplate(nodeName string) string {
+	return fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %[1]s-wasm-slight
+  namespace: default
+spec:
+  runtimeClassName: wasmtime-slight
+  containers:
+  - name: slight-hello
+    image: ghcr.io/deislabs/containerd-wasm-shims/examples/slight-rust-hello:v0.5.1
+    imagePullPolicy: IfNotPresent
+    command: ["/"]
+  nodeSelector:
+    kubernetes.io/hostname: %[1]s
+`, nodeName)
+}
+
+func getWasmRuntimeClassTemplate(wasmRuntime string) string {
+	return fmt.Sprintf(`apiVersion: node.k8s.io/v1
+kind: RuntimeClass
+metadata:
+  name: wasmtime-%[1]s
+handler: %[1]s
+`, wasmRuntime)
 }
 
 type listVMSSVMNetworkInterfaceResult struct {
