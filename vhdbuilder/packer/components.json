@@ -230,7 +230,9 @@
       ],
       "multiArchVersions": [
         "v1.24.1",
-        "v1.26.2"
+        "v1.24.2",
+        "v1.26.2",
+        "v1.26.3"
       ]
     },
     {
@@ -308,14 +310,6 @@
       "downloadURL": "mcr.microsoft.com/azure-application-gateway/kubernetes-ingress:*",
       "amd64OnlyVersions": [],
       "multiArchVersions": []
-    },
-    {
-      "downloadURL": "mcr.microsoft.com/oss/azure/aad-pod-identity/nmi:*",
-      "amd64OnlyVersions": [],
-      "multiArchVersions": [
-        "v1.8.13.3",
-        "v1.8.13.4"
-      ]
     },
     {
       "downloadURL": "mcr.microsoft.com/aks/aks-node-ca-watcher:*",

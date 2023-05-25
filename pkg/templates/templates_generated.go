@@ -781,12 +781,22 @@ fixDefaultUmaskForAccountCreation() {
     replaceOrAppendLoginDefs UMASK 027
 }
 
+function maskNfsServer() {
+    # If nfs-server.service exists, we need to mask it per CIS requirement.
+    # Note that on ubuntu systems, it isn't installed but on mariner we need it
+    # due to a dependency, but disable it by default.
+    if systemctl list-unit-files nfs-server.service >/dev/null; then
+        systemctl --now mask nfs-server || $ERR_SYSTEMCTL_MASK_FAIL
+    fi
+}
+
 applyCIS() {
     setPWExpiration
     assignRootPW
     assignFilePermissions
     configureCoreDump
     fixDefaultUmaskForAccountCreation
+    maskNfsServer
 }
 
 applyCIS
@@ -1842,6 +1852,8 @@ ERR_DISABLE_SSH=172 # Error disabling ssh service
 ERR_VHD_REBOOT_REQUIRED=200 # Reserved for VHD reboot required exit condition
 ERR_NO_PACKAGES_FOUND=201 # Reserved for no security packages found exit condition
 
+ERR_SYSTEMCTL_MASK_FAIL=2 # Service could not be masked by systemctl
+
 OS=$(sort -r /etc/*-release | gawk 'match($0, /^(ID_LIKE=(coreos)|ID=(.*))$/, a) { print toupper(a[2] a[3]); exit }')
 UBUNTU_OS_NAME="UBUNTU"
 MARINER_OS_NAME="MARINER"
@@ -1864,6 +1876,7 @@ export DOCKER_GPU_INSTALL_CMD="docker run --privileged --net=host --pid=host -v 
 APT_CACHE_DIR=/var/cache/apt/archives/
 PERMANENT_CACHE_DIR=/root/aptcache/
 EVENTS_LOGGING_DIR=/var/log/azure/Microsoft.Azure.Extensions.CustomScript/events/
+CURL_OUTPUT=/tmp/curl_verbose.out
 
 retrycmd_if_failure() {
     retries=$1; wait_sleep=$2; timeout=$3; shift && shift && shift
@@ -1897,7 +1910,10 @@ retrycmd_get_tarball() {
         if [ $i -eq $tar_retries ]; then
             return 1
         else
-            timeout 60 curl -fsSLv $url -o $tarball
+            timeout 60 curl -fsSLv $url -o $tarball 2>&1 | tee $CURL_OUTPUT >/dev/null
+            if [[ $? != 0 ]]; then
+                cat $CURL_OUTPUT
+            fi
             sleep $wait_sleep
         fi
     done
@@ -1910,7 +1926,10 @@ retrycmd_curl_file() {
         if [ $i -eq $curl_retries ]; then
             return 1
         else
-            timeout $timeout curl -fsSLv $url -o $filepath
+            timeout $timeout curl -fsSLv $url -o $filepath 2>&1 | tee $CURL_OUTPUT >/dev/null
+            if [[ $? != 0 ]]; then
+                cat $CURL_OUTPUT
+            fi
             sleep $wait_sleep
         fi
     done
@@ -2130,6 +2149,7 @@ TELEPORTD_PLUGIN_BIN_DIR="/usr/local/bin"
 CONTAINERD_WASM_VERSIONS="v0.3.0 v0.5.1"
 MANIFEST_FILEPATH="/opt/azure/manifest.json"
 MAN_DB_AUTO_UPDATE_FLAG_FILEPATH="/var/lib/man-db/auto-update"
+CURL_OUTPUT=/tmp/curl_verbose.out
 
 removeManDbAutoUpdateFlagFile() {
     rm -f $MAN_DB_AUTO_UPDATE_FLAG_FILEPATH
@@ -2193,8 +2213,8 @@ downloadContainerdWasmShims() {
         fi
 
         if [ ! -f "$containerd_wasm_filepath/containerd-shim-spin-${shim_version}" ] || [ ! -f "$containerd_wasm_filepath/containerd-shim-slight-${shim_version}" ]; then
-            retrycmd_if_failure 30 5 60 curl -fSLv -o "$containerd_wasm_filepath/containerd-shim-spin-${binary_version}-v1" "$containerd_wasm_url/containerd-shim-spin-v1" || exit $ERR_KRUSTLET_DOWNLOAD_TIMEOUT
-            retrycmd_if_failure 30 5 60 curl -fSLv -o "$containerd_wasm_filepath/containerd-shim-slight-${binary_version}-v1" "$containerd_wasm_url/containerd-shim-slight-v1" || exit $ERR_KRUSTLET_DOWNLOAD_TIMEOUT
+            retrycmd_if_failure 30 5 60 curl -fSLv -o "$containerd_wasm_filepath/containerd-shim-spin-${binary_version}-v1" "$containerd_wasm_url/containerd-shim-spin-v1" 2>&1 | tee $CURL_OUTPUT >/dev/null | grep -E "^(curl:.*)|([eE]rr.*)$" && (cat $CURL_OUTPUT && exit $ERR_KRUSTLET_DOWNLOAD_TIMEOUT)
+            retrycmd_if_failure 30 5 60 curl -fSLv -o "$containerd_wasm_filepath/containerd-shim-slight-${binary_version}-v1" "$containerd_wasm_url/containerd-shim-slight-v1" 2>&1 | tee $CURL_OUTPUT >/dev/null | grep -E "^(curl:.*)|([eE]rr.*)$" && (cat $CURL_OUTPUT && exit $ERR_KRUSTLET_DOWNLOAD_TIMEOUT)
             chmod 755 "$containerd_wasm_filepath/containerd-shim-spin-${binary_version}-v1"
             chmod 755 "$containerd_wasm_filepath/containerd-shim-slight-${binary_version}-v1"
         fi
@@ -4104,12 +4124,12 @@ var _linuxCloudInitArtifactsManifestJson = []byte(`{
         "downloadLocation": "",
         "downloadURL": "https://acs-mirror.azureedge.net/kubernetes/v${PATCHED_KUBE_BINARY_VERSION}/binaries/kubernetes-node-linux-${CPU_ARCH}.tar.gz",
         "versions": [
-            "1.24.9",
-            "1.24.10",
-            "1.25.5",
-            "1.25.6",
-            "1.26.0",
-            "1.26.3",
+            "1.24.9-hotfix.20230509",
+            "1.24.10-hotfix.20230509",
+            "1.25.5-hotfix.20230509",
+            "1.25.6-hotfix.20230509",
+            "1.26.0-hotfix.20230509",
+            "1.26.3-hotfix.20230509",
             "1.27.1"
         ]
     },
@@ -4271,11 +4291,6 @@ installNvidiaContainerRuntime() {
         exit $ERR_APT_INSTALL_TIMEOUT
       fi
     done
-}
-
-installSGXDrivers() {
-    echo "SGX drivers not yet supported for Mariner"
-    exit $ERR_SGX_DRIVERS_START_FAIL
 }
 
 # CSE+VHD can dictate the containerd version, users don't care as long as it works
@@ -5708,42 +5723,6 @@ installDeps() {
             exit $ERR_APT_INSTALL_TIMEOUT
         fi
     done
-}
-
-installSGXDrivers() {
-    if [[ $(isARM64) == 1 ]]; then
-        # no intel sgx on arm64
-        return
-    fi
-
-    echo "Installing SGX driver"
-    local VERSION
-    VERSION=$(grep DISTRIB_RELEASE /etc/*-release| cut -f 2 -d "=")
-    case $VERSION in
-    "18.04")
-        SGX_DRIVER_URL="https://download.01.org/intel-sgx/dcap-1.2/linux/dcap_installers/ubuntuServer18.04/sgx_linux_x64_driver_1.12_c110012.bin"
-        ;;
-    "16.04")
-        SGX_DRIVER_URL="https://download.01.org/intel-sgx/dcap-1.2/linux/dcap_installers/ubuntuServer16.04/sgx_linux_x64_driver_1.12_c110012.bin"
-        ;;
-    "*")
-        echo "Version $VERSION is not supported"
-        exit 1
-        ;;
-    esac
-
-    local PACKAGES="make gcc dkms"
-    wait_for_apt_locks
-    retrycmd_if_failure 30 5 3600 apt-get -y install $PACKAGES  || exit $ERR_SGX_DRIVERS_INSTALL_TIMEOUT
-
-    local SGX_DRIVER
-    SGX_DRIVER=$(basename $SGX_DRIVER_URL)
-    local OE_DIR=/opt/azure/containers/oe
-    mkdir -p ${OE_DIR}
-
-    retrycmd_if_failure 120 5 25 curl -fsSL ${SGX_DRIVER_URL} -o ${OE_DIR}/${SGX_DRIVER} || exit $ERR_SGX_DRIVERS_INSTALL_TIMEOUT
-    chmod a+x ${OE_DIR}/${SGX_DRIVER}
-    ${OE_DIR}/${SGX_DRIVER} || exit $ERR_SGX_DRIVERS_START_FAIL
 }
 
 updateAptWithMicrosoftPkg() {
