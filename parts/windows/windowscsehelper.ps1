@@ -56,8 +56,8 @@ $global:WINDOWS_CSE_ERROR_COPY_LOG_COLLECTION_SCRIPTS=51
 $global:WINDOWS_CSE_ERROR_RESIZE_OS_DRIVE=52
 
 # NOTE: KubernetesVersion does not contain "v"
-$global:MinimalKubernetesVersionWithLatestContainerd = "1.27.0" # Will change it to the correct version when we support new Windows containerd version
-$global:StableContainerdPackage = "v0.0.56/binaries/containerd-v0.0.56-windows-amd64.tar.gz"
+$global:MinimalKubernetesVersionWithLatestContainerd = "1.28.0" # Will change it to the correct version when we support new Windows containerd version
+$global:StableContainerdPackage = "v1.6.21-azure.1/binaries/containerd-v1.6.21-azure.1-windows-amd64.tar.gz"
 # The latest containerd version
 $global:LatestContainerdPackage = "v1.7.1-azure.1/binaries/containerd-v1.7.1-azure.1-windows-amd64.tar.gz"
 
